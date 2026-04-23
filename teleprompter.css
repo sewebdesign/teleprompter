@@ -198,7 +198,7 @@ header {
 }
 
 .privacy-body p a {
-  color: var(--ink);
+  color: var(--ink-dim);
 }
 
 .modal-actions {
