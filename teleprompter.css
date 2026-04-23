@@ -197,6 +197,10 @@ header {
   font-weight: 500;
 }
 
+.privacy-body p a {
+  color: var(--ink);
+}
+
 .modal-actions {
   display: flex;
   gap: 10px;
