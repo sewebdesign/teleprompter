@@ -894,3 +894,40 @@ function setupCanvasScrub() {
 }
 
 setupCanvasScrub();
+
+// --- Privacy notice modal -------------------------------------------
+(function setupPrivacyModal() {
+  const modal = $('privacy-modal');
+  const openBtn = $('privacy-open');
+  const acceptBtn = $('privacy-accept');
+  if (!modal || !openBtn || !acceptBtn) return;
+
+  const STORAGE_KEY = 'tp.privacyAcknowledged';
+  let lastFocused = null;
+
+  const open = () => {
+    lastFocused = document.activeElement;
+    modal.hidden = false;
+    modal.classList.add('open');
+    acceptBtn.focus();
+  };
+
+  const close = () => {
+    modal.classList.remove('open');
+    modal.hidden = true;
+    try { localStorage.setItem(STORAGE_KEY, '1'); } catch (_) { /* ignore */ }
+    if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
+  };
+
+  openBtn.addEventListener('click', open);
+  acceptBtn.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.classList.contains('open')) close();
+  });
+
+  const browserUnsupported = document.documentElement.dataset.browserUnsupported === 'true';
+  let acknowledged = false;
+  try { acknowledged = localStorage.getItem(STORAGE_KEY) === '1'; } catch (_) { /* ignore */ }
+  if (!acknowledged && !browserUnsupported) open();
+})();
