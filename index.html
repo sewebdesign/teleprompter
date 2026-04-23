@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voice Teleprompter</title>
+<meta name="description" content="A voice-driven teleprompter that highlights each word as you speak it. Paste a script, hit play, and read naturally — fuzzy phonetic matching keeps you on track." />
+<meta name="theme-color" content="#1a1111" />
+<meta name="color-scheme" content="dark" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Voice Teleprompter" />
+<meta property="og:description" content="A voice-driven teleprompter that highlights each word as you speak it. Read naturally — fuzzy phonetic matching keeps you on track." />
+<meta property="og:site_name" content="Voice Teleprompter" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Voice Teleprompter" />
+<meta name="twitter:description" content="A voice-driven teleprompter that highlights each word as you speak it. Read naturally — fuzzy phonetic matching keeps you on track." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%231a1111' rx='20'/%3E%3Cpolygon points='35,28 35,72 75,50' fill='%23ffb347'/%3E%3C/svg%3E" />
+<script>
+  (function () {
+    if (window.SpeechRecognition || window.webkitSpeechRecognition) return;
+    document.documentElement.dataset.browserUnsupported = 'true';
+  })();
+</script>
+<link rel="stylesheet" href="teleprompter.css">
+<script src="teleprompter.js" defer></script>
+</head>
+<body>
+<div class="browser-gate" role="alertdialog" aria-modal="true" aria-labelledby="bg-title" aria-describedby="bg-body">
+  <div class="browser-gate-card">
+    <div class="browser-gate-icon" aria-hidden="true">⚠</div>
+    <h2 id="bg-title">This app needs Chrome or Edge</h2>
+    <p id="bg-body">
+      Voice Teleprompter uses the Web Speech API for live voice recognition, which is only available in Chromium-based browsers. Please open this page in Google Chrome or Microsoft Edge to continue.
+    </p>
+    <div class="browser-gate-actions">
+      <a class="browser-gate-btn primary" href="https://www.google.com/chrome/" target="_blank" rel="noopener">Get Chrome</a>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <header>
+    <div class="brand">
+      <h1>Teleprompter</h1>
+      <span class="tag">voice-driven</span>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="status-text">idle</span>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="stage-inner" id="stage-inner">
+      <div class="drag-handle left" id="drag-left" role="separator" aria-orientation="vertical" aria-label="Resize prompter width (use left and right arrow keys)" tabindex="0" title="Drag to resize"></div>
+      <div class="drag-handle right" id="drag-right" role="separator" aria-orientation="vertical" aria-label="Resize prompter width (use left and right arrow keys)" tabindex="0" title="Drag to resize"></div>
+
+      <main>
+        <!-- Editor -->
+        <div class="editor" id="editor">
+          <label for="script-input" class="editor-label">Your script</label>
+          <textarea id="script-input" aria-label="Your script" placeholder="Paste or type your script here. When you hit Play, the words will advance only as you speak them — pause and they'll wait for you.
+
+Try reading slowly and clearly. The matcher is tolerant of minor misreads, fillers, and skipped words."></textarea>
+        </div>
+
+        <!-- Prompter -->
+        <div class="prompter" id="prompter">
+          <div class="reading-line" aria-hidden="true"></div>
+          <div id="script-display"></div>
+        </div>
+
+        <div class="error-banner" id="error-banner" role="alert"></div>
+      </main>
+    </div>
+  </div>
+
+  <footer>
+    <div class="meta">
+      <span>Words <strong id="word-count">0</strong></span>
+    </div>
+    <div class="adjust">
+      <div class="adjust-group">
+        <span class="adjust-label" id="width-label">Width</span>
+        <input type="range" id="width-slider" aria-labelledby="width-label" min="400" max="1300" step="10" value="900" />
+        <span class="adjust-value" id="width-value">900</span>
+      </div>
+      <div class="adjust-group">
+        <span class="adjust-label" id="size-label">Text Size</span>
+        <input type="range" id="size-slider" aria-labelledby="size-label" min="18" max="80" step="1" value="36" />
+        <span class="adjust-value" id="size-value">36</span>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="btn-edit" aria-label="Edit script" disabled>Edit</button>
+      <button id="btn-reset" aria-label="Reset progress" disabled>Reset</button>
+      <button id="btn-play" class="primary" aria-label="Play">▶  Play</button>
+    </div>
+  </footer>
+</div>
+</body>
+</html>
