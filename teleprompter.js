@@ -35,6 +35,14 @@ function normalize(word) {
     .replace(/'/g, '');
 }
 
+// --- Bullet detection ------------------------------------------------
+// Recognize common bullet glyphs at the start of a line. Plain hyphens or
+// asterisks aren't treated as bullets — too easy to misfire on prose like
+// "* important note" or "-30 degrees".
+const BULLET_CHARS = '•◦▪●·‣⦾⦿';
+const BULLET_LINE_RE = new RegExp(`^(\\s*)([${BULLET_CHARS}])\\s*(.*)$`);
+const BULLET_LEAD_RE = new RegExp(`^\\s*[${BULLET_CHARS}]`);
+
 // --- Simple phonetic key (Metaphone-lite) ----------------------------
 // Good enough to handle homophones & small mispronunciations for a demo.
 function phoneticKey(word) {
@@ -363,43 +371,102 @@ function advanceWithHeard(heardWords) {
 }
 
 // --- Rendering -------------------------------------------------------
-function renderScript(text) {
-  // Preserve structure: split into tokens, keep punctuation attached
-  scriptDisplay.innerHTML = '';
-  scriptWords = [];
-  displayWords = [];
-
+// Tokenize a string of text into word/space spans, appending each to the
+// given container. Word spans are pushed onto displayWords so the matcher
+// and highlighter can find them by index.
+function appendWordsTo(container, text) {
   const tokens = text.match(/\S+|\s+/g) || [];
-  let wordIdx = 0;
-
   for (const tok of tokens) {
     if (/^\s+$/.test(tok)) {
-      // Two-or-more newlines = paragraph break; render as vertical gap.
-      // Single newlines / spaces collapse to one space (normal wrapping).
-      if ((tok.match(/\n/g) || []).length >= 2) {
-        scriptDisplay.appendChild(document.createElement('br'));
-        scriptDisplay.appendChild(document.createElement('br'));
-      } else {
-        scriptDisplay.appendChild(document.createTextNode(' '));
-      }
+      container.appendChild(document.createTextNode(' '));
       continue;
     }
     const span = document.createElement('span');
     span.className = 'word upcoming';
     span.textContent = tok;
-    span.dataset.idx = wordIdx;
-    scriptDisplay.appendChild(span);
+    container.appendChild(span);
 
     const normalized = normalize(tok);
     if (normalized) {
       scriptWords.push(normalized);
       displayWords.push(span);
-      wordIdx++;
     } else {
       // punctuation-only token: keep as non-word
       span.classList.remove('upcoming');
       span.classList.add('spoken');
     }
+  }
+}
+
+function renderScript(text) {
+  scriptDisplay.innerHTML = '';
+  scriptWords = [];
+  displayWords = [];
+
+  // Walk lines, grouping into paragraph blocks and bullet items. Bullet
+  // items render as flex rows with a fixed-width marker so wrapped lines
+  // hang under the text, not under the bullet glyph.
+  const lines = text.split('\n');
+  let i = 0;
+  let needBreak = false;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (/^\s*$/.test(line)) {
+      needBreak = true;
+      i++;
+      continue;
+    }
+
+    const bulletMatch = line.match(BULLET_LINE_RE);
+
+    if (bulletMatch) {
+      const indentSpaces = bulletMatch[1].length;
+      const bulletChar = bulletMatch[2];
+      const content = bulletMatch[3];
+      // Cap nesting at 3 to avoid runaway indent on weird input. Two spaces
+      // per level matches the convention used by the paste converter.
+      const depth = Math.min(3, Math.floor(indentSpaces / 2));
+
+      const item = document.createElement('div');
+      item.className = 'bullet-item';
+      if (needBreak && scriptDisplay.children.length) item.classList.add('break-before');
+      item.style.setProperty('--bullet-depth', depth);
+
+      const marker = document.createElement('span');
+      marker.className = 'bullet-marker';
+      marker.textContent = bulletChar;
+      item.appendChild(marker);
+
+      const contentEl = document.createElement('span');
+      contentEl.className = 'bullet-content';
+      appendWordsTo(contentEl, content);
+      item.appendChild(contentEl);
+
+      scriptDisplay.appendChild(item);
+      needBreak = false;
+      i++;
+      continue;
+    }
+
+    // Plain paragraph: collect consecutive non-blank, non-bullet lines.
+    // Join with spaces so single newlines wrap naturally with the container.
+    const paraParts = [];
+    while (
+      i < lines.length &&
+      !/^\s*$/.test(lines[i]) &&
+      !BULLET_LEAD_RE.test(lines[i])
+    ) {
+      paraParts.push(lines[i].trim());
+      i++;
+    }
+    const para = document.createElement('div');
+    para.className = 'paragraph';
+    if (needBreak && scriptDisplay.children.length) para.classList.add('break-before');
+    appendWordsTo(para, paraParts.join(' '));
+    scriptDisplay.appendChild(para);
+    needBreak = false;
   }
 
   wordCountEl.textContent = scriptWords.length;
@@ -668,6 +735,127 @@ scriptInput.addEventListener('input', () => {
   const count = (scriptInput.value.match(/\S+/g) || []).length;
   wordCountEl.textContent = count;
   try { localStorage.setItem(SCRIPT_STORAGE_KEY, scriptInput.value); } catch (_) {}
+});
+
+// --- Paste from rich-text sources (Google Docs, Word, etc.) ----------
+// When the clipboard carries HTML with lists, convert <ul>/<ol>/<li>
+// structures to plain text with leading "• " markers (and two-space indent
+// per nesting level). renderScript() then turns those markers back into
+// hanging-indent bullet rows. If there are no lists, fall through to the
+// browser's default plain-text paste.
+function htmlToBulletText(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  if (!doc.querySelector('ul, ol, li')) return null;
+
+  const lines = [];
+
+  // Get the text content of an element, excluding nested lists (which are
+  // rendered separately) but converting <br> to newlines so multi-line
+  // bullet content survives.
+  function directText(el) {
+    let result = '';
+    for (const child of el.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        result += child.textContent;
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        const tag = child.tagName.toLowerCase();
+        if (tag === 'ul' || tag === 'ol') continue;
+        if (tag === 'br') { result += '\n'; continue; }
+        result += directText(child);
+      }
+    }
+    return result.replace(/[ \t\r]+/g, ' ');
+  }
+
+  function processList(listEl, depth) {
+    for (const li of listEl.children) {
+      if (li.tagName?.toLowerCase() !== 'li') continue;
+      const raw = directText(li).trim();
+      const indent = '  '.repeat(depth);
+      if (raw) {
+        const parts = raw.split('\n').map(s => s.trim()).filter(Boolean);
+        if (parts.length) {
+          lines.push(indent + '• ' + parts[0]);
+          for (let p = 1; p < parts.length; p++) {
+            lines.push(indent + '  ' + parts[p]);
+          }
+        }
+      }
+      for (const child of li.children) {
+        const t = child.tagName?.toLowerCase();
+        if (t === 'ul' || t === 'ol') processList(child, depth + 1);
+      }
+    }
+  }
+
+  function processNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const t = node.textContent.replace(/[ \t\r\n]+/g, ' ').trim();
+      if (t) lines.push(t);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const tag = node.tagName.toLowerCase();
+
+    if (tag === 'ul' || tag === 'ol') {
+      if (lines.length && lines[lines.length - 1] !== '') lines.push('');
+      processList(node, 0);
+      lines.push('');
+      return;
+    }
+
+    if (tag === 'p' || tag === 'div' || /^h[1-6]$/.test(tag)) {
+      const text = directText(node).trim();
+      if (text) {
+        if (lines.length && lines[lines.length - 1] !== '') lines.push('');
+        for (const t of text.split('\n').map(s => s.trim()).filter(Boolean)) {
+          lines.push(t);
+        }
+        lines.push('');
+      }
+      // Process nested lists separately so they each get their own block
+      for (const child of node.children) {
+        const t = child.tagName?.toLowerCase();
+        if (t === 'ul' || t === 'ol') processNode(child);
+      }
+      return;
+    }
+
+    if (tag === 'br') {
+      if (lines.length) lines.push('');
+      return;
+    }
+
+    // Default: recurse through children (handles <span>, <b>, etc.)
+    for (const child of node.childNodes) {
+      processNode(child);
+    }
+  }
+
+  for (const child of doc.body.childNodes) {
+    processNode(child);
+  }
+
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+scriptInput.addEventListener('paste', (e) => {
+  const html = e.clipboardData?.getData('text/html');
+  if (!html) return;
+
+  const converted = htmlToBulletText(html);
+  if (!converted) return;
+
+  e.preventDefault();
+  const start = scriptInput.selectionStart;
+  const end = scriptInput.selectionEnd;
+  const before = scriptInput.value.slice(0, start);
+  const after = scriptInput.value.slice(end);
+  scriptInput.value = before + converted + after;
+  const caret = start + converted.length;
+  scriptInput.selectionStart = scriptInput.selectionEnd = caret;
+  scriptInput.dispatchEvent(new Event('input'));
 });
 
 // Restore saved script if present, otherwise prefill a sample so users can try immediately.

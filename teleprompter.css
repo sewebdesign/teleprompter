@@ -428,6 +428,39 @@ main {
   transition: none;
 }
 
+/* Block structure: paragraphs and bullet items.
+   Bullets use flex layout so wrapped lines hang under the text rather
+   than under the bullet glyph. The marker takes a fixed-width column
+   and the content fills the rest. */
+.paragraph,
+.bullet-item {
+  margin: 0;
+}
+
+.bullet-item {
+  display: flex;
+  align-items: flex-start;
+  padding-left: calc(var(--bullet-depth, 0) * 1.5em);
+}
+
+.bullet-marker {
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 20px;
+  flex: 0 0 1.5em;
+  color: var(--ink-dim);
+  user-select: none;
+}
+
+.bullet-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.break-before {
+  margin-top: 0.8em;
+}
+
 .word {
   display: inline;
   color: var(--ink-ghost);
